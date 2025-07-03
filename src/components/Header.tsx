@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { Search, ShoppingCart, User, Menu, X } from 'lucide-react';
+import { Search, ShoppingCart, User, Menu, X, Package, UserCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { supabase } from '@/integrations/supabase/client';
@@ -13,6 +13,7 @@ const Header = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isCartOpen, setIsCartOpen] = useState(false);
+  const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -32,6 +33,7 @@ const Header = () => {
   const handleSignOut = async () => {
     await supabase.auth.signOut();
     navigate('/');
+    setIsUserMenuOpen(false);
   };
 
   const handleSearch = (e: React.FormEvent) => {
@@ -87,15 +89,46 @@ const Header = () => {
             {/* User Actions */}
             <div className="flex items-center space-x-4">
               {user ? (
-                <div className="flex items-center space-x-4">
+                <div className="relative">
                   <Button
                     variant="ghost"
                     className="text-white hover:bg-blue-700 hidden md:flex"
-                    onClick={handleSignOut}
+                    onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
                   >
                     <User size={20} className="mr-2" />
-                    Sign Out
+                    Account
                   </Button>
+                  
+                  {isUserMenuOpen && (
+                    <div className="absolute right-0 top-full mt-2 w-48 bg-white rounded-lg shadow-lg py-2 z-50">
+                      <button
+                        onClick={() => {
+                          navigate('/profile');
+                          setIsUserMenuOpen(false);
+                        }}
+                        className="w-full text-left px-4 py-2 text-gray-700 hover:bg-gray-100 flex items-center"
+                      >
+                        <UserCircle size={16} className="mr-2" />
+                        My Profile
+                      </button>
+                      <button
+                        onClick={() => {
+                          navigate('/orders');
+                          setIsUserMenuOpen(false);
+                        }}
+                        className="w-full text-left px-4 py-2 text-gray-700 hover:bg-gray-100 flex items-center"
+                      >
+                        <Package size={16} className="mr-2" />
+                        My Orders
+                      </button>
+                      <button
+                        onClick={handleSignOut}
+                        className="w-full text-left px-4 py-2 text-gray-700 hover:bg-gray-100"
+                      >
+                        Sign Out
+                      </button>
+                    </div>
+                  )}
                 </div>
               ) : (
                 <Button
@@ -147,14 +180,38 @@ const Header = () => {
           <div className="md:hidden border-t border-blue-500 bg-blue-700">
             <div className="container mx-auto px-4 py-4 space-y-2">
               {user ? (
-                <Button
-                  variant="ghost"
-                  className="w-full text-left text-white hover:bg-blue-600 justify-start"
-                  onClick={handleSignOut}
-                >
-                  <User size={20} className="mr-2" />
-                  Sign Out
-                </Button>
+                <>
+                  <Button
+                    variant="ghost"
+                    className="w-full text-left text-white hover:bg-blue-600 justify-start"
+                    onClick={() => {
+                      navigate('/profile');
+                      setIsMenuOpen(false);
+                    }}
+                  >
+                    <UserCircle size={20} className="mr-2" />
+                    My Profile
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    className="w-full text-left text-white hover:bg-blue-600 justify-start"
+                    onClick={() => {
+                      navigate('/orders');
+                      setIsMenuOpen(false);
+                    }}
+                  >
+                    <Package size={20} className="mr-2" />
+                    My Orders
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    className="w-full text-left text-white hover:bg-blue-600 justify-start"
+                    onClick={handleSignOut}
+                  >
+                    <User size={20} className="mr-2" />
+                    Sign Out
+                  </Button>
+                </>
               ) : (
                 <Button
                   variant="ghost"
