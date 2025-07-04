@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { Search, ShoppingCart, User, Menu, X, Package, UserCircle } from 'lucide-react';
+import { Search, ShoppingCart, User, Menu, X, Package, UserCircle, Heart } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { supabase } from '@/integrations/supabase/client';
@@ -141,6 +141,16 @@ const Header = () => {
                 </Button>
               )}
               
+              {/* Wishlist Button */}
+              <Button
+                variant="ghost"
+                className="text-white hover:bg-blue-700"
+                onClick={() => navigate('/wishlist')}
+              >
+                <Heart size={20} />
+                <span className="ml-2 hidden md:inline">Wishlist</span>
+              </Button>
+              
               <Button
                 variant="ghost"
                 className="text-white hover:bg-blue-700 relative"
@@ -202,6 +212,17 @@ const Header = () => {
                   >
                     <Package size={20} className="mr-2" />
                     My Orders
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    className="w-full text-left text-white hover:bg-blue-600 justify-start"
+                    onClick={() => {
+                      navigate('/wishlist');
+                      setIsMenuOpen(false);
+                    }}
+                  >
+                    <Heart size={20} className="mr-2" />
+                    Wishlist
                   </Button>
                   <Button
                     variant="ghost"

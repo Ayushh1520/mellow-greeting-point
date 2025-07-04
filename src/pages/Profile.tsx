@@ -9,7 +9,8 @@ import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import Header from '@/components/Header';
 import Footer from '@/components/Footer';
-import { User, Edit, Save, X } from 'lucide-react';
+import AddressForm from '@/components/AddressForm';
+import { User, Edit, Save, X, Plus, MapPin, Gift, Zap, Clock } from 'lucide-react';
 import type { Tables } from '@/integrations/supabase/types';
 
 type Profile = Tables<'profiles'>;
@@ -22,6 +23,8 @@ const Profile = () => {
   const [addresses, setAddresses] = useState<Address[]>([]);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(false);
+  const [editingAddress, setEditingAddress] = useState<Address | null>(null);
+  const [showAddressForm, setShowAddressForm] = useState(false);
   const [formData, setFormData] = useState({
     first_name: '',
     last_name: '',
@@ -161,6 +164,17 @@ const Profile = () => {
     }
   };
 
+  const handleAddressSave = () => {
+    fetchAddresses();
+    setShowAddressForm(false);
+    setEditingAddress(null);
+  };
+
+  const handleAddressCancel = () => {
+    setShowAddressForm(false);
+    setEditingAddress(null);
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50">
@@ -171,6 +185,22 @@ const Profile = () => {
             <div className="h-40 bg-gray-200 rounded"></div>
             <div className="h-40 bg-gray-200 rounded"></div>
           </div>
+        </div>
+        <Footer />
+      </div>
+    );
+  }
+
+  if (showAddressForm || editingAddress) {
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <Header />
+        <div className="container mx-auto px-4 py-8">
+          <AddressForm
+            address={editingAddress || undefined}
+            onSave={handleAddressSave}
+            onCancel={handleAddressCancel}
+          />
         </div>
         <Footer />
       </div>
@@ -274,6 +304,51 @@ const Profile = () => {
             </CardContent>
           </Card>
 
+          {/* Unique Features - Not available on real Flipkart */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center space-x-2">
+                <Zap className="w-5 h-5 text-yellow-500" />
+                <span>Premium Features</span>
+                <Badge variant="secondary" className="ml-2">Exclusive</Badge>
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-center justify-between p-3 bg-gradient-to-r from-purple-50 to-pink-50 rounded-lg">
+                <div className="flex items-center space-x-3">
+                  <Gift className="w-5 h-5 text-purple-600" />
+                  <div>
+                    <p className="font-medium">Birthday Surprise</p>
+                    <p className="text-sm text-gray-600">Get special offers on your birthday</p>
+                  </div>
+                </div>
+                <Button size="sm" variant="outline">Setup</Button>
+              </div>
+              
+              <div className="flex items-center justify-between p-3 bg-gradient-to-r from-blue-50 to-cyan-50 rounded-lg">
+                <div className="flex items-center space-x-3">
+                  <Clock className="w-5 h-5 text-blue-600" />
+                  <div>
+                    <p className="font-medium">Smart Scheduler</p>
+                    <p className="text-sm text-gray-600">Schedule your purchases for optimal timing</p>
+                  </div>
+                </div>
+                <Button size="sm" variant="outline">Enable</Button>
+              </div>
+              
+              <div className="flex items-center justify-between p-3 bg-gradient-to-r from-green-50 to-emerald-50 rounded-lg">
+                <div className="flex items-center space-x-3">
+                  <MapPin className="w-5 h-5 text-green-600" />
+                  <div>
+                    <p className="font-medium">Geo Deals</p>
+                    <p className="text-sm text-gray-600">Location-based exclusive offers</p>
+                  </div>
+                </div>
+                <Button size="sm" variant="outline">Activate</Button>
+              </div>
+            </CardContent>
+          </Card>
+
           {/* Quick Actions */}
           <Card>
             <CardHeader>
@@ -288,11 +363,11 @@ const Profile = () => {
                 View Order History
               </Button>
               <Button
-                onClick={() => navigate('/checkout')}
+                onClick={() => navigate('/wishlist')}
                 variant="outline"
                 className="w-full justify-start"
               >
-                Manage Addresses
+                My Wishlist
               </Button>
               <Button
                 onClick={() => supabase.auth.signOut()}
@@ -304,14 +379,51 @@ const Profile = () => {
             </CardContent>
           </Card>
 
+          {/* Virtual Shopping Assistant - Unique Feature */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center space-x-2">
+                <div className="w-5 h-5 bg-gradient-to-r from-orange-400 to-pink-400 rounded-full"></div>
+                <span>AI Shopping Assistant</span>
+                <Badge className="bg-gradient-to-r from-orange-500 to-pink-500 text-white">Beta</Badge>
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <p className="text-sm text-gray-600">
+                Get personalized product recommendations based on your shopping history and preferences.
+              </p>
+              <div className="grid grid-cols-2 gap-2">
+                <Button variant="outline" size="sm">Style Match</Button>
+                <Button variant="outline" size="sm">Price Alert</Button>
+                <Button variant="outline" size="sm">Trend Forecast</Button>
+                <Button variant="outline" size="sm">Bulk Deals</Button>
+              </div>
+            </CardContent>
+          </Card>
+
           {/* Saved Addresses */}
           <Card className="lg:col-span-2">
             <CardHeader>
-              <CardTitle>Saved Addresses</CardTitle>
+              <div className="flex justify-between items-center">
+                <CardTitle>Saved Addresses</CardTitle>
+                <Button
+                  onClick={() => setShowAddressForm(true)}
+                  size="sm"
+                >
+                  <Plus className="w-4 h-4 mr-2" />
+                  Add Address
+                </Button>
+              </div>
             </CardHeader>
             <CardContent>
               {addresses.length === 0 ? (
-                <p className="text-gray-600">No addresses saved yet</p>
+                <div className="text-center py-8">
+                  <MapPin className="w-12 h-12 text-gray-300 mx-auto mb-4" />
+                  <p className="text-gray-600 mb-4">No addresses saved yet</p>
+                  <Button onClick={() => setShowAddressForm(true)}>
+                    Add Your First Address
+                  </Button>
+                </div>
               ) : (
                 <div className="space-y-4">
                   {addresses.map((address) => (
@@ -331,6 +443,13 @@ const Profile = () => {
                           <p className="text-sm text-gray-600">{address.phone}</p>
                         </div>
                         <div className="flex space-x-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setEditingAddress(address)}
+                          >
+                            Edit
+                          </Button>
                           {!address.is_default && (
                             <Button
                               variant="outline"
