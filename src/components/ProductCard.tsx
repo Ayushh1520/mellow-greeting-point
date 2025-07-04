@@ -1,6 +1,6 @@
 
-import React from 'react';
-import { Star, ShoppingCart } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Star, ShoppingCart, Heart } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { useNavigate } from 'react-router-dom';
@@ -17,6 +17,87 @@ interface ProductCardProps {
 const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
   const navigate = useNavigate();
   const { toast } = useToast();
+  const [isInWishlist, setIsInWishlist] = useState(false);
+  const [isWishlistLoading, setIsWishlistLoading] = useState(false);
+
+  useEffect(() => {
+    checkWishlistStatus();
+  }, [product.id]);
+
+  const checkWishlistStatus = async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    const { data } = await supabase
+      .from('wishlists')
+      .select('id')
+      .eq('user_id', user.id)
+      .eq('product_id', product.id)
+      .single();
+
+    setIsInWishlist(!!data);
+  };
+
+  const toggleWishlist = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      toast({
+        title: "Please login",
+        description: "You need to login to manage your wishlist",
+        variant: "destructive",
+      });
+      navigate('/auth');
+      return;
+    }
+
+    setIsWishlistLoading(true);
+
+    try {
+      if (isInWishlist) {
+        // Remove from wishlist
+        const { error } = await supabase
+          .from('wishlists')
+          .delete()
+          .eq('user_id', user.id)
+          .eq('product_id', product.id);
+
+        if (error) throw error;
+        
+        setIsInWishlist(false);
+        toast({
+          title: "Removed from wishlist",
+          description: `${product.name} has been removed from your wishlist`,
+        });
+      } else {
+        // Add to wishlist
+        const { error } = await supabase
+          .from('wishlists')
+          .insert({
+            user_id: user.id,
+            product_id: product.id,
+          });
+
+        if (error) throw error;
+        
+        setIsInWishlist(true);
+        toast({
+          title: "Added to wishlist",
+          description: `${product.name} has been added to your wishlist`,
+        });
+      }
+    } catch (error) {
+      console.error('Error managing wishlist:', error);
+      toast({
+        title: "Error",
+        description: "Failed to update wishlist",
+        variant: "destructive",
+      });
+    } finally {
+      setIsWishlistLoading(false);
+    }
+  };
 
   const addToCart = async (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -61,7 +142,7 @@ const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
 
   return (
     <div 
-      className="bg-white rounded-lg shadow-md hover:shadow-lg transition-shadow cursor-pointer group"
+      className="bg-white rounded-lg shadow-md hover:shadow-lg transition-shadow cursor-pointer group relative"
       onClick={() => navigate(`/product/${product.id}`)}
     >
       <div className="relative overflow-hidden rounded-t-lg">
@@ -75,6 +156,19 @@ const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
             {product.discount_percentage}% OFF
           </Badge>
         )}
+        <Button
+          variant="ghost"
+          size="sm"
+          className={`absolute top-2 right-2 p-2 h-8 w-8 ${
+            isInWishlist ? 'text-red-500 hover:text-red-600' : 'text-gray-400 hover:text-red-500'
+          }`}
+          onClick={toggleWishlist}
+          disabled={isWishlistLoading}
+        >
+          <Heart 
+            className={`w-4 h-4 ${isInWishlist ? 'fill-current' : ''}`} 
+          />
+        </Button>
       </div>
 
       <div className="p-4">
