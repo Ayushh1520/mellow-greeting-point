@@ -1,16 +1,16 @@
-
 import React, { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
+import { useSubscription } from '@/contexts/SubscriptionContext';
 import Header from '@/components/Header';
 import Footer from '@/components/Footer';
 import AddressForm from '@/components/AddressForm';
-import { User, Edit, Save, X, Plus, MapPin, Gift, Zap, Clock } from 'lucide-react';
+import { User, Edit, Save, X, Plus, MapPin, Gift, Zap, Clock, Crown, Star, Sparkles } from 'lucide-react';
 import type { Tables } from '@/integrations/supabase/types';
 
 type Profile = Tables<'profiles'>;
@@ -18,7 +18,10 @@ type Address = Tables<'addresses'>;
 
 const Profile = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { toast } = useToast();
+  const { subscribed, subscriptionTier, subscriptionEnd, loading: subscriptionLoading, checkSubscription, createCheckoutSession, manageSubscription } = useSubscription();
+  
   const [profile, setProfile] = useState<Profile | null>(null);
   const [addresses, setAddresses] = useState<Address[]>([]);
   const [loading, setLoading] = useState(true);
@@ -33,7 +36,25 @@ const Profile = () => {
 
   useEffect(() => {
     checkAuthAndFetchData();
-  }, []);
+    
+    // Check for payment success/cancel params
+    if (searchParams.get('success') === 'true') {
+      toast({
+        title: "Payment Successful!",
+        description: "Your subscription has been activated. It may take a few moments to update.",
+      });
+      // Refresh subscription status
+      setTimeout(() => {
+        checkSubscription();
+      }, 2000);
+    } else if (searchParams.get('canceled') === 'true') {
+      toast({
+        title: "Payment Canceled",
+        description: "Your subscription payment was canceled.",
+        variant: "destructive",
+      });
+    }
+  }, [searchParams]);
 
   const checkAuthAndFetchData = async () => {
     const { data: { user } } = await supabase.auth.getUser();
@@ -175,6 +196,30 @@ const Profile = () => {
     setEditingAddress(null);
   };
 
+  const handleSubscribe = async (tier: string) => {
+    try {
+      await createCheckoutSession(tier);
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to create checkout session",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleManageSubscription = async () => {
+    try {
+      await manageSubscription();
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to open subscription management",
+        variant: "destructive",
+      });
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50">
@@ -304,48 +349,187 @@ const Profile = () => {
             </CardContent>
           </Card>
 
-          {/* Unique Features - Not available on real Flipkart */}
+          {/* Subscription Status & Management */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center space-x-2">
+                <Crown className="w-5 h-5 text-yellow-500" />
+                <span>Subscription Status</span>
+                {subscribed && <Badge className="bg-green-500">{subscriptionTier}</Badge>}
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {subscriptionLoading ? (
+                <div className="animate-pulse space-y-2">
+                  <div className="h-4 bg-gray-200 rounded w-3/4"></div>
+                  <div className="h-4 bg-gray-200 rounded w-1/2"></div>
+                </div>
+              ) : subscribed ? (
+                <div className="space-y-4">
+                  <div className="p-4 bg-green-50 rounded-lg border border-green-200">
+                    <div className="flex items-center space-x-2 mb-2">
+                      <Star className="w-5 h-5 text-green-600" />
+                      <span className="font-medium text-green-800">Active Subscription</span>
+                    </div>
+                    <p className="text-sm text-green-700">
+                      Plan: <strong>{subscriptionTier}</strong>
+                    </p>
+                    {subscriptionEnd && (
+                      <p className="text-sm text-green-700">
+                        Next billing: {new Date(subscriptionEnd).toLocaleDateString()}
+                      </p>
+                    )}
+                  </div>
+                  <div className="flex space-x-2">
+                    <Button onClick={handleManageSubscription} className="flex-1">
+                      Manage Subscription
+                    </Button>
+                    <Button onClick={checkSubscription} variant="outline">
+                      Refresh Status
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <p className="text-gray-600">No active subscription</p>
+                  <div className="grid grid-cols-1 gap-3">
+                    <Button 
+                      onClick={() => handleSubscribe('Basic')} 
+                      variant="outline"
+                      className="flex items-center justify-between p-4 h-auto"
+                    >
+                      <div className="text-left">
+                        <div className="font-medium">Basic Plan</div>
+                        <div className="text-sm text-gray-500">$9.99/month</div>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-sm">Essential features</div>
+                      </div>
+                    </Button>
+                    <Button 
+                      onClick={() => handleSubscribe('Premium')} 
+                      className="flex items-center justify-between p-4 h-auto bg-blue-600 hover:bg-blue-700"
+                    >
+                      <div className="text-left">
+                        <div className="font-medium">Premium Plan</div>
+                        <div className="text-sm opacity-90">$19.99/month</div>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-sm opacity-90">All premium features</div>
+                      </div>
+                    </Button>
+                    <Button 
+                      onClick={() => handleSubscribe('Enterprise')} 
+                      variant="outline"
+                      className="flex items-center justify-between p-4 h-auto border-purple-200 hover:bg-purple-50"
+                    >
+                      <div className="text-left">
+                        <div className="font-medium text-purple-700">Enterprise Plan</div>
+                        <div className="text-sm text-purple-600">$49.99/month</div>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-sm text-purple-600">Advanced features</div>
+                      </div>
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Premium Features - Enhanced based on subscription */}
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center space-x-2">
                 <Zap className="w-5 h-5 text-yellow-500" />
                 <span>Premium Features</span>
-                <Badge variant="secondary" className="ml-2">Exclusive</Badge>
+                {subscribed ? (
+                  <Badge className="bg-green-500">Active</Badge>
+                ) : (
+                  <Badge variant="secondary">Subscribe to Unlock</Badge>
+                )}
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="flex items-center justify-between p-3 bg-gradient-to-r from-purple-50 to-pink-50 rounded-lg">
+              <div className={`flex items-center justify-between p-3 rounded-lg ${subscribed ? 'bg-gradient-to-r from-purple-50 to-pink-50' : 'bg-gray-50'}`}>
                 <div className="flex items-center space-x-3">
-                  <Gift className="w-5 h-5 text-purple-600" />
+                  <Gift className={`w-5 h-5 ${subscribed ? 'text-purple-600' : 'text-gray-400'}`} />
                   <div>
-                    <p className="font-medium">Birthday Surprise</p>
-                    <p className="text-sm text-gray-600">Get special offers on your birthday</p>
+                    <p className={`font-medium ${subscribed ? 'text-purple-800' : 'text-gray-500'}`}>Birthday Surprise</p>
+                    <p className={`text-sm ${subscribed ? 'text-purple-600' : 'text-gray-400'}`}>Get special offers on your birthday</p>
                   </div>
                 </div>
-                <Button size="sm" variant="outline">Setup</Button>
+                <Button size="sm" variant="outline" disabled={!subscribed}>
+                  {subscribed ? 'Setup' : 'Locked'}
+                </Button>
               </div>
               
-              <div className="flex items-center justify-between p-3 bg-gradient-to-r from-blue-50 to-cyan-50 rounded-lg">
+              <div className={`flex items-center justify-between p-3 rounded-lg ${subscribed ? 'bg-gradient-to-r from-blue-50 to-cyan-50' : 'bg-gray-50'}`}>
                 <div className="flex items-center space-x-3">
-                  <Clock className="w-5 h-5 text-blue-600" />
+                  <Clock className={`w-5 h-5 ${subscribed ? 'text-blue-600' : 'text-gray-400'}`} />
                   <div>
-                    <p className="font-medium">Smart Scheduler</p>
-                    <p className="text-sm text-gray-600">Schedule your purchases for optimal timing</p>
+                    <p className={`font-medium ${subscribed ? 'text-blue-800' : 'text-gray-500'}`}>Smart Scheduler</p>
+                    <p className={`text-sm ${subscribed ? 'text-blue-600' : 'text-gray-400'}`}>Schedule your purchases for optimal timing</p>
                   </div>
                 </div>
-                <Button size="sm" variant="outline">Enable</Button>
+                <Button size="sm" variant="outline" disabled={!subscribed}>
+                  {subscribed ? 'Enable' : 'Locked'}
+                </Button>
               </div>
               
-              <div className="flex items-center justify-between p-3 bg-gradient-to-r from-green-50 to-emerald-50 rounded-lg">
+              <div className={`flex items-center justify-between p-3 rounded-lg ${subscribed ? 'bg-gradient-to-r from-green-50 to-emerald-50' : 'bg-gray-50'}`}>
                 <div className="flex items-center space-x-3">
-                  <MapPin className="w-5 h-5 text-green-600" />
+                  <MapPin className={`w-5 h-5 ${subscribed ? 'text-green-600' : 'text-gray-400'}`} />
                   <div>
-                    <p className="font-medium">Geo Deals</p>
-                    <p className="text-sm text-gray-600">Location-based exclusive offers</p>
+                    <p className={`font-medium ${subscribed ? 'text-green-800' : 'text-gray-500'}`}>Geo Deals</p>
+                    <p className={`text-sm ${subscribed ? 'text-green-600' : 'text-gray-400'}`}>Location-based exclusive offers</p>
                   </div>
                 </div>
-                <Button size="sm" variant="outline">Activate</Button>
+                <Button size="sm" variant="outline" disabled={!subscribed}>
+                  {subscribed ? 'Activate' : 'Locked'}
+                </Button>
               </div>
+            </CardContent>
+          </Card>
+
+          {/* AI Shopping Assistant - Enhanced based on subscription */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center space-x-2">
+                <Sparkles className="w-5 h-5 bg-gradient-to-r from-orange-400 to-pink-400 rounded-full p-1 text-white" />
+                <span>AI Shopping Assistant</span>
+                {subscribed ? (
+                  <Badge className="bg-gradient-to-r from-orange-500 to-pink-500 text-white">Active</Badge>
+                ) : (
+                  <Badge variant="secondary">Subscribe to Unlock</Badge>
+                )}
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <p className={`text-sm ${subscribed ? 'text-gray-600' : 'text-gray-400'}`}>
+                Get personalized product recommendations based on your shopping history and preferences.
+              </p>
+              <div className="grid grid-cols-2 gap-2">
+                <Button variant="outline" size="sm" disabled={!subscribed}>
+                  {subscribed ? 'Style Match' : '🔒 Style Match'}
+                </Button>
+                <Button variant="outline" size="sm" disabled={!subscribed}>
+                  {subscribed ? 'Price Alert' : '🔒 Price Alert'}
+                </Button>
+                <Button variant="outline" size="sm" disabled={!subscribed}>
+                  {subscribed ? 'Trend Forecast' : '🔒 Trend Forecast'}
+                </Button>
+                <Button variant="outline" size="sm" disabled={!subscribed}>
+                  {subscribed ? 'Bulk Deals' : '🔒 Bulk Deals'}
+                </Button>
+              </div>
+              {!subscribed && (
+                <div className="mt-4 p-3 bg-orange-50 rounded-lg border border-orange-200">
+                  <p className="text-sm text-orange-800">
+                    Subscribe to unlock AI-powered shopping assistance and get personalized recommendations!
+                  </p>
+                </div>
+              )}
             </CardContent>
           </Card>
 
@@ -376,28 +560,6 @@ const Profile = () => {
               >
                 Sign Out
               </Button>
-            </CardContent>
-          </Card>
-
-          {/* Virtual Shopping Assistant - Unique Feature */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center space-x-2">
-                <div className="w-5 h-5 bg-gradient-to-r from-orange-400 to-pink-400 rounded-full"></div>
-                <span>AI Shopping Assistant</span>
-                <Badge className="bg-gradient-to-r from-orange-500 to-pink-500 text-white">Beta</Badge>
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <p className="text-sm text-gray-600">
-                Get personalized product recommendations based on your shopping history and preferences.
-              </p>
-              <div className="grid grid-cols-2 gap-2">
-                <Button variant="outline" size="sm">Style Match</Button>
-                <Button variant="outline" size="sm">Price Alert</Button>
-                <Button variant="outline" size="sm">Trend Forecast</Button>
-                <Button variant="outline" size="sm">Bulk Deals</Button>
-              </div>
             </CardContent>
           </Card>
 
