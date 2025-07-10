@@ -31,59 +31,76 @@ const Search = () => {
     setLoading(true);
     console.log('Searching for:', query);
     
-    // More precise search - prioritize exact matches and relevant terms
-    const searchTerms = query.toLowerCase().split(' ').filter(term => term.length > 1);
-    console.log('Search terms:', searchTerms);
+    const searchTerm = query.toLowerCase().trim();
+    console.log('Processed search term:', searchTerm);
     
-    // Build a more targeted search query
-    let searchQuery = supabase
+    // Get all active products first
+    const { data: allProducts, error } = await supabase
       .from('products')
       .select('*')
       .eq('is_active', true);
 
-    // Create conditions for each search term to match in name, description, or brand
-    const conditions = searchTerms.map(term => 
-      `name.ilike.%${term}%,description.ilike.%${term}%,brand.ilike.%${term}%`
-    ).join(',');
-    
-    const { data, error } = await searchQuery
-      .or(conditions)
-      .order('created_at', { ascending: false });
-
     if (error) {
-      console.error('Error searching products:', error);
+      console.error('Error fetching products:', error);
       setProducts([]);
-    } else {
-      console.log('Search results:', data?.length);
-      // Filter results for better relevance
-      const filteredResults = data?.filter(product => {
-        const productText = `${product.name} ${product.description} ${product.brand}`.toLowerCase();
-        // Check if the product contains at least one of the search terms significantly
-        return searchTerms.some(term => 
-          productText.includes(term) && 
-          (product.name?.toLowerCase().includes(term) || 
-           product.brand?.toLowerCase().includes(term) ||
-           product.description?.toLowerCase().includes(term))
-        );
-      }) || [];
+      setLoading(false);
+      return;
+    }
+
+    console.log('Total products found:', allProducts?.length);
+
+    // Advanced filtering and scoring system
+    const scoredProducts = allProducts?.map(product => {
+      let score = 0;
+      const name = (product.name || '').toLowerCase();
+      const brand = (product.brand || '').toLowerCase();
+      const description = (product.description || '').toLowerCase();
       
-      // Sort by relevance - name matches first, then brand, then description
-      const sortedResults = filteredResults.sort((a, b) => {
-        const aNameMatch = searchTerms.some(term => a.name?.toLowerCase().includes(term));
-        const bNameMatch = searchTerms.some(term => b.name?.toLowerCase().includes(term));
-        const aBrandMatch = searchTerms.some(term => a.brand?.toLowerCase().includes(term));
-        const bBrandMatch = searchTerms.some(term => b.brand?.toLowerCase().includes(term));
-        
-        if (aNameMatch && !bNameMatch) return -1;
-        if (!aNameMatch && bNameMatch) return 1;
-        if (aBrandMatch && !bBrandMatch) return -1;
-        if (!aBrandMatch && bBrandMatch) return 1;
-        
-        return 0;
+      // Exact name match gets highest score
+      if (name === searchTerm) score += 100;
+      
+      // Name starts with search term
+      if (name.startsWith(searchTerm)) score += 80;
+      
+      // Name contains search term
+      if (name.includes(searchTerm)) score += 60;
+      
+      // Brand exact match
+      if (brand === searchTerm) score += 70;
+      
+      // Brand starts with search term
+      if (brand.startsWith(searchTerm)) score += 50;
+      
+      // Brand contains search term
+      if (brand.includes(searchTerm)) score += 30;
+      
+      // Description contains search term (lower priority)
+      if (description.includes(searchTerm)) score += 10;
+      
+      // Partial word matches in name (for compound searches)
+      const searchWords = searchTerm.split(' ');
+      searchWords.forEach(word => {
+        if (word.length > 2) {
+          if (name.includes(word)) score += 20;
+          if (brand.includes(word)) score += 15;
+        }
       });
       
-      setProducts(sortedResults);
-    }
+      return { ...product, searchScore: score };
+    }).filter(product => product.searchScore > 0) || [];
+
+    // Sort by score (highest first) then by rating
+    const sortedProducts = scoredProducts.sort((a, b) => {
+      if (b.searchScore !== a.searchScore) {
+        return b.searchScore - a.searchScore;
+      }
+      return (b.rating || 0) - (a.rating || 0);
+    });
+
+    console.log('Filtered products:', sortedProducts.length);
+    console.log('Top results:', sortedProducts.slice(0, 3).map(p => ({ name: p.name, score: p.searchScore })));
+    
+    setProducts(sortedProducts);
     setLoading(false);
   };
 
@@ -157,7 +174,7 @@ const Search = () => {
               No products found
             </h2>
             <p className="text-gray-500 mb-6">
-              Try searching with different keywords
+              Try searching with different keywords or check your spelling
             </p>
             <Button onClick={() => navigate('/')}>
               Browse All Products

@@ -4,12 +4,13 @@ import { Search, ShoppingCart, User, Menu, X, Package, UserCircle, Heart } from 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { supabase } from '@/integrations/supabase/client';
-import { User as SupabaseUser } from '@supabase/supabase-js';
+import { User as SupabaseUser, Session } from '@supabase/supabase-js';
 import { useNavigate } from 'react-router-dom';
 import CartSidebar from './CartSidebar';
 
 const Header = () => {
   const [user, setUser] = useState<SupabaseUser | null>(null);
+  const [session, setSession] = useState<Session | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isCartOpen, setIsCartOpen] = useState(false);
@@ -17,15 +18,19 @@ const Header = () => {
   const navigate = useNavigate();
 
   useEffect(() => {
+    // Set up auth state listener first
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
         console.log('Header auth state changed:', event, session?.user?.email);
+        setSession(session);
         setUser(session?.user ?? null);
       }
     );
 
+    // Then check for existing session
     supabase.auth.getSession().then(({ data: { session } }) => {
       console.log('Header current session:', session?.user?.email);
+      setSession(session);
       setUser(session?.user ?? null);
     });
 
@@ -34,17 +39,31 @@ const Header = () => {
 
   const handleSignOut = async () => {
     console.log('Signing out user');
-    await supabase.auth.signOut();
-    navigate('/');
-    setIsUserMenuOpen(false);
+    const { error } = await supabase.auth.signOut();
+    if (error) {
+      console.error('Error signing out:', error);
+    } else {
+      setIsUserMenuOpen(false);
+      navigate('/');
+    }
   };
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
     if (searchQuery.trim()) {
       navigate(`/search?q=${encodeURIComponent(searchQuery.trim())}`);
-      setSearchQuery(''); // Clear search after navigation
+      setSearchQuery('');
     }
+  };
+
+  const getUserDisplayName = () => {
+    if (user?.user_metadata?.first_name) {
+      return user.user_metadata.first_name;
+    }
+    if (user?.email) {
+      return user.email.split('@')[0];
+    }
+    return 'Account';
   };
 
   return (
@@ -100,7 +119,7 @@ const Header = () => {
                     onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
                   >
                     <User size={20} className="mr-2" />
-                    {user.user_metadata?.first_name || 'Account'}
+                    {getUserDisplayName()}
                   </Button>
                   
                   {isUserMenuOpen && (
@@ -145,7 +164,6 @@ const Header = () => {
                 </Button>
               )}
               
-              {/* Wishlist Button */}
               <Button
                 variant="ghost"
                 className="text-white hover:bg-blue-700"

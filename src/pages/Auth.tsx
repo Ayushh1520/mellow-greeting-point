@@ -8,13 +8,13 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
-import { User } from '@supabase/supabase-js';
+import { User, Session } from '@supabase/supabase-js';
 
 const Auth = () => {
   const [user, setUser] = useState<User | null>(null);
+  const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(false);
   
-  // Separate states for signin and signup
   const [signinForm, setSigninForm] = useState({
     email: '',
     password: ''
@@ -32,11 +32,14 @@ const Auth = () => {
   const { toast } = useToast();
 
   useEffect(() => {
+    // Set up auth state listener first
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
         console.log('Auth state changed:', event, session?.user?.email);
+        setSession(session);
         setUser(session?.user ?? null);
-        if (session?.user) {
+        
+        if (session?.user && event === 'SIGNED_IN') {
           toast({
             title: "Welcome!",
             description: "You have been signed in successfully.",
@@ -46,8 +49,10 @@ const Auth = () => {
       }
     );
 
+    // Then check for existing session
     supabase.auth.getSession().then(({ data: { session } }) => {
       console.log('Current session:', session?.user?.email);
+      setSession(session);
       setUser(session?.user ?? null);
       if (session?.user) {
         navigate('/');
@@ -59,27 +64,40 @@ const Auth = () => {
 
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    if (!signinForm.email || !signinForm.password) {
+      toast({
+        title: "Missing Information",
+        description: "Please enter both email and password.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setLoading(true);
     console.log('Attempting signin with:', signinForm.email);
 
     const { data, error } = await supabase.auth.signInWithPassword({
-      email: signinForm.email,
+      email: signinForm.email.trim(),
       password: signinForm.password,
     });
 
     if (error) {
       console.error('Signin error:', error);
+      let errorMessage = error.message;
+      
+      if (error.message.includes('Invalid login credentials')) {
+        errorMessage = "Invalid email or password. Please check your credentials and try again.";
+      }
+      
       toast({
         title: "Sign In Failed",
-        description: error.message,
+        description: errorMessage,
         variant: "destructive",
       });
     } else {
       console.log('Signin successful:', data.user?.email);
-      toast({
-        title: "Success",
-        description: "Signed in successfully!",
-      });
+      // Success handled by auth state change
     }
 
     setLoading(false);
@@ -87,37 +105,70 @@ const Auth = () => {
 
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    if (!signupForm.email || !signupForm.password || !signupForm.firstName || !signupForm.lastName) {
+      toast({
+        title: "Missing Information",
+        description: "Please fill in all fields.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (signupForm.password.length < 6) {
+      toast({
+        title: "Password Too Short",
+        description: "Password must be at least 6 characters long.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setLoading(true);
     console.log('Attempting signup with:', signupForm.email);
 
     const redirectUrl = `${window.location.origin}/`;
 
     const { data, error } = await supabase.auth.signUp({
-      email: signupForm.email,
+      email: signupForm.email.trim(),
       password: signupForm.password,
       options: {
         emailRedirectTo: redirectUrl,
         data: {
-          first_name: signupForm.firstName,
-          last_name: signupForm.lastName,
+          first_name: signupForm.firstName.trim(),
+          last_name: signupForm.lastName.trim(),
         },
       },
     });
 
     if (error) {
       console.error('Signup error:', error);
+      let errorMessage = error.message;
+      
+      if (error.message.includes('User already registered')) {
+        errorMessage = "An account with this email already exists. Please sign in instead.";
+      }
+      
       toast({
         title: "Sign Up Failed",
-        description: error.message,
+        description: errorMessage,
         variant: "destructive",
       });
     } else {
       console.log('Signup successful:', data.user?.email);
-      toast({
-        title: "Account Created!",
-        description: "Please check your email for verification before signing in.",
-      });
-      // Clear signup form on success
+      
+      if (data.user && !data.session) {
+        toast({
+          title: "Account Created!",
+          description: "Please check your email for verification before signing in.",
+        });
+      } else {
+        toast({
+          title: "Account Created!",
+          description: "Welcome! You're now signed in.",
+        });
+      }
+      
       setSignupForm({
         email: '',
         password: '',
@@ -131,11 +182,21 @@ const Auth = () => {
 
   const handleForgotPassword = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    if (!resetEmail) {
+      toast({
+        title: "Missing Email",
+        description: "Please enter your email address.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setLoading(true);
 
     const redirectUrl = `${window.location.origin}/auth`;
 
-    const { error } = await supabase.auth.resetPasswordForEmail(resetEmail, {
+    const { error } = await supabase.auth.resetPasswordForEmail(resetEmail.trim(), {
       redirectTo: redirectUrl,
     });
 
@@ -194,6 +255,7 @@ const Auth = () => {
                       onChange={(e) => setSigninForm(prev => ({ ...prev, email: e.target.value }))}
                       required
                       placeholder="Enter your email"
+                      disabled={loading}
                     />
                   </div>
                   <div>
@@ -205,6 +267,7 @@ const Auth = () => {
                       onChange={(e) => setSigninForm(prev => ({ ...prev, password: e.target.value }))}
                       required
                       placeholder="Enter your password"
+                      disabled={loading}
                     />
                   </div>
                   <Button
@@ -229,6 +292,7 @@ const Auth = () => {
                         onChange={(e) => setSignupForm(prev => ({ ...prev, firstName: e.target.value }))}
                         required
                         placeholder="First name"
+                        disabled={loading}
                       />
                     </div>
                     <div>
@@ -240,6 +304,7 @@ const Auth = () => {
                         onChange={(e) => setSignupForm(prev => ({ ...prev, lastName: e.target.value }))}
                         required
                         placeholder="Last name"
+                        disabled={loading}
                       />
                     </div>
                   </div>
@@ -252,6 +317,7 @@ const Auth = () => {
                       onChange={(e) => setSignupForm(prev => ({ ...prev, email: e.target.value }))}
                       required
                       placeholder="Enter your email"
+                      disabled={loading}
                     />
                   </div>
                   <div>
@@ -264,6 +330,7 @@ const Auth = () => {
                       required
                       placeholder="Create a password"
                       minLength={6}
+                      disabled={loading}
                     />
                   </div>
                   <Button
@@ -287,6 +354,7 @@ const Auth = () => {
                       onChange={(e) => setResetEmail(e.target.value)}
                       required
                       placeholder="Enter your email address"
+                      disabled={loading}
                     />
                   </div>
                   <div className="text-sm text-gray-600">
