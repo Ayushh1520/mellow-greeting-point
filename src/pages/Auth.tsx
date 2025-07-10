@@ -13,10 +13,20 @@ import { User } from '@supabase/supabase-js';
 const Auth = () => {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(false);
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [firstName, setFirstName] = useState('');
-  const [lastName, setLastName] = useState('');
+  
+  // Separate states for signin and signup
+  const [signinForm, setSigninForm] = useState({
+    email: '',
+    password: ''
+  });
+  
+  const [signupForm, setSignupForm] = useState({
+    email: '',
+    password: '',
+    firstName: '',
+    lastName: ''
+  });
+  
   const [resetEmail, setResetEmail] = useState('');
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -24,14 +34,20 @@ const Auth = () => {
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
+        console.log('Auth state changed:', event, session?.user?.email);
         setUser(session?.user ?? null);
         if (session?.user) {
+          toast({
+            title: "Welcome!",
+            description: "You have been signed in successfully.",
+          });
           navigate('/');
         }
       }
     );
 
     supabase.auth.getSession().then(({ data: { session } }) => {
+      console.log('Current session:', session?.user?.email);
       setUser(session?.user ?? null);
       if (session?.user) {
         navigate('/');
@@ -39,24 +55,27 @@ const Auth = () => {
     });
 
     return () => subscription.unsubscribe();
-  }, [navigate]);
+  }, [navigate, toast]);
 
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
+    console.log('Attempting signin with:', signinForm.email);
 
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email: signinForm.email,
+      password: signinForm.password,
     });
 
     if (error) {
+      console.error('Signin error:', error);
       toast({
-        title: "Error",
+        title: "Sign In Failed",
         description: error.message,
         variant: "destructive",
       });
     } else {
+      console.log('Signin successful:', data.user?.email);
       toast({
         title: "Success",
         description: "Signed in successfully!",
@@ -69,31 +88,41 @@ const Auth = () => {
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
+    console.log('Attempting signup with:', signupForm.email);
 
     const redirectUrl = `${window.location.origin}/`;
 
-    const { error } = await supabase.auth.signUp({
-      email,
-      password,
+    const { data, error } = await supabase.auth.signUp({
+      email: signupForm.email,
+      password: signupForm.password,
       options: {
         emailRedirectTo: redirectUrl,
         data: {
-          first_name: firstName,
-          last_name: lastName,
+          first_name: signupForm.firstName,
+          last_name: signupForm.lastName,
         },
       },
     });
 
     if (error) {
+      console.error('Signup error:', error);
       toast({
-        title: "Error",
+        title: "Sign Up Failed",
         description: error.message,
         variant: "destructive",
       });
     } else {
+      console.log('Signup successful:', data.user?.email);
       toast({
-        title: "Success",
-        description: "Account created successfully! Please check your email for verification.",
+        title: "Account Created!",
+        description: "Please check your email for verification before signing in.",
+      });
+      // Clear signup form on success
+      setSignupForm({
+        email: '',
+        password: '',
+        firstName: '',
+        lastName: ''
       });
     }
 
@@ -161,8 +190,8 @@ const Auth = () => {
                     <Input
                       id="signin-email"
                       type="email"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
+                      value={signinForm.email}
+                      onChange={(e) => setSigninForm(prev => ({ ...prev, email: e.target.value }))}
                       required
                       placeholder="Enter your email"
                     />
@@ -172,8 +201,8 @@ const Auth = () => {
                     <Input
                       id="signin-password"
                       type="password"
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
+                      value={signinForm.password}
+                      onChange={(e) => setSigninForm(prev => ({ ...prev, password: e.target.value }))}
                       required
                       placeholder="Enter your password"
                     />
@@ -196,8 +225,8 @@ const Auth = () => {
                       <Input
                         id="first-name"
                         type="text"
-                        value={firstName}
-                        onChange={(e) => setFirstName(e.target.value)}
+                        value={signupForm.firstName}
+                        onChange={(e) => setSignupForm(prev => ({ ...prev, firstName: e.target.value }))}
                         required
                         placeholder="First name"
                       />
@@ -207,8 +236,8 @@ const Auth = () => {
                       <Input
                         id="last-name"
                         type="text"
-                        value={lastName}
-                        onChange={(e) => setLastName(e.target.value)}
+                        value={signupForm.lastName}
+                        onChange={(e) => setSignupForm(prev => ({ ...prev, lastName: e.target.value }))}
                         required
                         placeholder="Last name"
                       />
@@ -219,8 +248,8 @@ const Auth = () => {
                     <Input
                       id="signup-email"
                       type="email"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
+                      value={signupForm.email}
+                      onChange={(e) => setSignupForm(prev => ({ ...prev, email: e.target.value }))}
                       required
                       placeholder="Enter your email"
                     />
@@ -230,10 +259,11 @@ const Auth = () => {
                     <Input
                       id="signup-password"
                       type="password"
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
+                      value={signupForm.password}
+                      onChange={(e) => setSignupForm(prev => ({ ...prev, password: e.target.value }))}
                       required
                       placeholder="Create a password"
+                      minLength={6}
                     />
                   </div>
                   <Button

@@ -29,17 +29,60 @@ const Search = () => {
 
   const searchProducts = async (query: string) => {
     setLoading(true);
-    const { data, error } = await supabase
+    console.log('Searching for:', query);
+    
+    // More precise search - prioritize exact matches and relevant terms
+    const searchTerms = query.toLowerCase().split(' ').filter(term => term.length > 1);
+    console.log('Search terms:', searchTerms);
+    
+    // Build a more targeted search query
+    let searchQuery = supabase
       .from('products')
       .select('*')
-      .or(`name.ilike.%${query}%, description.ilike.%${query}%, brand.ilike.%${query}%`)
-      .eq('is_active', true)
+      .eq('is_active', true);
+
+    // Create conditions for each search term to match in name, description, or brand
+    const conditions = searchTerms.map(term => 
+      `name.ilike.%${term}%,description.ilike.%${term}%,brand.ilike.%${term}%`
+    ).join(',');
+    
+    const { data, error } = await searchQuery
+      .or(conditions)
       .order('created_at', { ascending: false });
 
     if (error) {
       console.error('Error searching products:', error);
+      setProducts([]);
     } else {
-      setProducts(data || []);
+      console.log('Search results:', data?.length);
+      // Filter results for better relevance
+      const filteredResults = data?.filter(product => {
+        const productText = `${product.name} ${product.description} ${product.brand}`.toLowerCase();
+        // Check if the product contains at least one of the search terms significantly
+        return searchTerms.some(term => 
+          productText.includes(term) && 
+          (product.name?.toLowerCase().includes(term) || 
+           product.brand?.toLowerCase().includes(term) ||
+           product.description?.toLowerCase().includes(term))
+        );
+      }) || [];
+      
+      // Sort by relevance - name matches first, then brand, then description
+      const sortedResults = filteredResults.sort((a, b) => {
+        const aNameMatch = searchTerms.some(term => a.name?.toLowerCase().includes(term));
+        const bNameMatch = searchTerms.some(term => b.name?.toLowerCase().includes(term));
+        const aBrandMatch = searchTerms.some(term => a.brand?.toLowerCase().includes(term));
+        const bBrandMatch = searchTerms.some(term => b.brand?.toLowerCase().includes(term));
+        
+        if (aNameMatch && !bNameMatch) return -1;
+        if (!aNameMatch && bNameMatch) return 1;
+        if (aBrandMatch && !bBrandMatch) return -1;
+        if (!aBrandMatch && bBrandMatch) return 1;
+        
+        return 0;
+      });
+      
+      setProducts(sortedResults);
     }
     setLoading(false);
   };

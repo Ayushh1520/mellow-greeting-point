@@ -19,11 +19,13 @@ const Header = () => {
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
+        console.log('Header auth state changed:', event, session?.user?.email);
         setUser(session?.user ?? null);
       }
     );
 
     supabase.auth.getSession().then(({ data: { session } }) => {
+      console.log('Header current session:', session?.user?.email);
       setUser(session?.user ?? null);
     });
 
@@ -31,6 +33,7 @@ const Header = () => {
   }, []);
 
   const handleSignOut = async () => {
+    console.log('Signing out user');
     await supabase.auth.signOut();
     navigate('/');
     setIsUserMenuOpen(false);
@@ -39,7 +42,8 @@ const Header = () => {
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
     if (searchQuery.trim()) {
-      navigate(`/search?q=${encodeURIComponent(searchQuery)}`);
+      navigate(`/search?q=${encodeURIComponent(searchQuery.trim())}`);
+      setSearchQuery(''); // Clear search after navigation
     }
   };
 
@@ -96,7 +100,7 @@ const Header = () => {
                     onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
                   >
                     <User size={20} className="mr-2" />
-                    Account
+                    {user.user_metadata?.first_name || 'Account'}
                   </Button>
                   
                   {isUserMenuOpen && (
@@ -237,7 +241,10 @@ const Header = () => {
                 <Button
                   variant="ghost"
                   className="w-full text-left text-white hover:bg-blue-600 justify-start"
-                  onClick={() => navigate('/auth')}
+                  onClick={() => {
+                    navigate('/auth');
+                    setIsMenuOpen(false);
+                  }}
                 >
                   <User size={20} className="mr-2" />
                   Login
