@@ -142,10 +142,15 @@ const Auth = () => {
     console.log('Attempting signup with:', signupForm.email);
 
     try {
+      // Get current URL origin for redirect
+      const redirectUrl = `${window.location.origin}/`;
+      console.log('Using redirect URL:', redirectUrl);
+
       const { data, error } = await supabase.auth.signUp({
         email: signupForm.email.trim(),
         password: signupForm.password,
         options: {
+          emailRedirectTo: redirectUrl,
           data: {
             first_name: signupForm.firstName.trim(),
             last_name: signupForm.lastName.trim(),
@@ -168,13 +173,16 @@ const Auth = () => {
         });
       } else if (data.user) {
         console.log('Signup successful:', data.user.email);
+        console.log('User confirmation status:', data.user.email_confirmed_at);
         
         if (data.user && !data.session) {
+          // User needs to confirm email
           toast({
-            title: "Account Created!",
-            description: "Please check your email for verification before signing in.",
+            title: "Account Created Successfully!",
+            description: "Please check your email inbox (and spam folder) for a verification link to complete your registration.",
           });
         } else {
+          // User is immediately signed in (email confirmation disabled)
           toast({
             title: "Account Created!",
             description: "Welcome! You're now signed in.",
@@ -215,20 +223,27 @@ const Auth = () => {
     }
 
     setLoading(true);
+    console.log('Attempting password reset for:', resetEmail);
 
     try {
-      const { error } = await supabase.auth.resetPasswordForEmail(resetEmail.trim());
+      const redirectUrl = `${window.location.origin}/`;
+      
+      const { error } = await supabase.auth.resetPasswordForEmail(resetEmail.trim(), {
+        redirectTo: redirectUrl,
+      });
 
       if (error) {
+        console.error('Password reset error:', error);
         toast({
           title: "Error",
           description: error.message,
           variant: "destructive",
         });
       } else {
+        console.log('Password reset email sent successfully');
         toast({
-          title: "Success",
-          description: "Password reset email sent! Please check your email for instructions.",
+          title: "Reset Email Sent!",
+          description: "Please check your email inbox (and spam folder) for password reset instructions.",
         });
         setResetEmail('');
       }
