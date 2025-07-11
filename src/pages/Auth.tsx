@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -8,12 +8,14 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
-import { User, Session } from '@supabase/supabase-js';
+import { useAuth } from '@/hooks/useAuth';
+import { Loader2, Eye, EyeOff } from 'lucide-react';
 
 const Auth = () => {
-  const [user, setUser] = useState<User | null>(null);
-  const [session, setSession] = useState<Session | null>(null);
+  const { user, loading: authLoading } = useAuth();
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showSignupPassword, setShowSignupPassword] = useState(false);
   
   const [signinForm, setSigninForm] = useState({
     email: '',
@@ -28,194 +30,227 @@ const Auth = () => {
   });
   
   const [resetEmail, setResetEmail] = useState('');
+  const [errors, setErrors] = useState<Record<string, string>>({});
   const navigate = useNavigate();
   const { toast } = useToast();
 
-  useEffect(() => {
-    // Set up auth state listener first
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (event, session) => {
-        console.log('Auth state changed:', event, session?.user?.email);
-        setSession(session);
-        setUser(session?.user ?? null);
-        
-        if (session?.user && event === 'SIGNED_IN') {
-          toast({
-            title: "Welcome!",
-            description: "You have been signed in successfully.",
-          });
-          navigate('/');
-        }
-      }
-    );
+  // Redirect if already authenticated
+  React.useEffect(() => {
+    if (user && !authLoading) {
+      navigate('/');
+    }
+  }, [user, authLoading, navigate]);
 
-    // Then check for existing session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      console.log('Current session:', session?.user?.email);
-      setSession(session);
-      setUser(session?.user ?? null);
-      if (session?.user) {
-        navigate('/');
-      }
-    });
-
-    return () => subscription.unsubscribe();
-  }, [navigate, toast]);
+  const validateEmail = (email: string) => {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return emailRegex.test(email);
+  };
 
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
+    setErrors({});
     
-    if (!signinForm.email || !signinForm.password) {
-      toast({
-        title: "Missing Information",
-        description: "Please enter both email and password.",
-        variant: "destructive",
-      });
+    // Validation
+    const newErrors: Record<string, string> = {};
+    if (!signinForm.email) {
+      newErrors.signinEmail = 'Email is required';
+    } else if (!validateEmail(signinForm.email)) {
+      newErrors.signinEmail = 'Please enter a valid email';
+    }
+    if (!signinForm.password) {
+      newErrors.signinPassword = 'Password is required';
+    }
+
+    if (Object.keys(newErrors).length > 0) {
+      setErrors(newErrors);
       return;
     }
 
     setLoading(true);
     console.log('Attempting signin with:', signinForm.email);
 
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email: signinForm.email.trim(),
-      password: signinForm.password,
-    });
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: signinForm.email.trim(),
+        password: signinForm.password,
+      });
 
-    if (error) {
-      console.error('Signin error:', error);
-      let errorMessage = error.message;
-      
-      if (error.message.includes('Invalid login credentials')) {
-        errorMessage = "Invalid email or password. Please check your credentials and try again.";
+      if (error) {
+        console.error('Signin error:', error);
+        let errorMessage = error.message;
+        
+        if (error.message.includes('Invalid login credentials')) {
+          errorMessage = "Invalid email or password. Please check your credentials and try again.";
+        } else if (error.message.includes('Email not confirmed')) {
+          errorMessage = "Please check your email and click the confirmation link before signing in.";
+        }
+        
+        toast({
+          title: "Sign In Failed",
+          description: errorMessage,
+          variant: "destructive",
+        });
+      } else if (data.user) {
+        console.log('Signin successful:', data.user.email);
+        toast({
+          title: "Welcome back!",
+          description: "You have been signed in successfully.",
+        });
+        // Navigation will be handled by useAuth hook
       }
-      
+    } catch (error) {
+      console.error('Unexpected signin error:', error);
       toast({
         title: "Sign In Failed",
-        description: errorMessage,
+        description: "An unexpected error occurred. Please try again.",
         variant: "destructive",
       });
-    } else {
-      console.log('Signin successful:', data.user?.email);
-      // Success handled by auth state change
+    } finally {
+      setLoading(false);
     }
-
-    setLoading(false);
   };
 
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
+    setErrors({});
     
-    if (!signupForm.email || !signupForm.password || !signupForm.firstName || !signupForm.lastName) {
-      toast({
-        title: "Missing Information",
-        description: "Please fill in all fields.",
-        variant: "destructive",
-      });
-      return;
+    // Validation
+    const newErrors: Record<string, string> = {};
+    if (!signupForm.firstName) {
+      newErrors.firstName = 'First name is required';
+    }
+    if (!signupForm.lastName) {
+      newErrors.lastName = 'Last name is required';
+    }
+    if (!signupForm.email) {
+      newErrors.signupEmail = 'Email is required';
+    } else if (!validateEmail(signupForm.email)) {
+      newErrors.signupEmail = 'Please enter a valid email';
+    }
+    if (!signupForm.password) {
+      newErrors.signupPassword = 'Password is required';
+    } else if (signupForm.password.length < 6) {
+      newErrors.signupPassword = 'Password must be at least 6 characters';
     }
 
-    if (signupForm.password.length < 6) {
-      toast({
-        title: "Password Too Short",
-        description: "Password must be at least 6 characters long.",
-        variant: "destructive",
-      });
+    if (Object.keys(newErrors).length > 0) {
+      setErrors(newErrors);
       return;
     }
 
     setLoading(true);
     console.log('Attempting signup with:', signupForm.email);
 
-    const redirectUrl = `${window.location.origin}/`;
-
-    const { data, error } = await supabase.auth.signUp({
-      email: signupForm.email.trim(),
-      password: signupForm.password,
-      options: {
-        emailRedirectTo: redirectUrl,
-        data: {
-          first_name: signupForm.firstName.trim(),
-          last_name: signupForm.lastName.trim(),
+    try {
+      const { data, error } = await supabase.auth.signUp({
+        email: signupForm.email.trim(),
+        password: signupForm.password,
+        options: {
+          data: {
+            first_name: signupForm.firstName.trim(),
+            last_name: signupForm.lastName.trim(),
+          },
         },
-      },
-    });
+      });
 
-    if (error) {
-      console.error('Signup error:', error);
-      let errorMessage = error.message;
-      
-      if (error.message.includes('User already registered')) {
-        errorMessage = "An account with this email already exists. Please sign in instead.";
+      if (error) {
+        console.error('Signup error:', error);
+        let errorMessage = error.message;
+        
+        if (error.message.includes('User already registered')) {
+          errorMessage = "An account with this email already exists. Please sign in instead.";
+        }
+        
+        toast({
+          title: "Sign Up Failed",
+          description: errorMessage,
+          variant: "destructive",
+        });
+      } else if (data.user) {
+        console.log('Signup successful:', data.user.email);
+        
+        if (data.user && !data.session) {
+          toast({
+            title: "Account Created!",
+            description: "Please check your email for verification before signing in.",
+          });
+        } else {
+          toast({
+            title: "Account Created!",
+            description: "Welcome! You're now signed in.",
+          });
+        }
+        
+        setSignupForm({
+          email: '',
+          password: '',
+          firstName: '',
+          lastName: ''
+        });
       }
-      
+    } catch (error) {
+      console.error('Unexpected signup error:', error);
       toast({
         title: "Sign Up Failed",
-        description: errorMessage,
+        description: "An unexpected error occurred. Please try again.",
         variant: "destructive",
       });
-    } else {
-      console.log('Signup successful:', data.user?.email);
-      
-      if (data.user && !data.session) {
-        toast({
-          title: "Account Created!",
-          description: "Please check your email for verification before signing in.",
-        });
-      } else {
-        toast({
-          title: "Account Created!",
-          description: "Welcome! You're now signed in.",
-        });
-      }
-      
-      setSignupForm({
-        email: '',
-        password: '',
-        firstName: '',
-        lastName: ''
-      });
+    } finally {
+      setLoading(false);
     }
-
-    setLoading(false);
   };
 
   const handleForgotPassword = async (e: React.FormEvent) => {
     e.preventDefault();
+    setErrors({});
     
     if (!resetEmail) {
-      toast({
-        title: "Missing Email",
-        description: "Please enter your email address.",
-        variant: "destructive",
-      });
+      setErrors({ resetEmail: 'Email is required' });
+      return;
+    }
+
+    if (!validateEmail(resetEmail)) {
+      setErrors({ resetEmail: 'Please enter a valid email' });
       return;
     }
 
     setLoading(true);
 
-    const redirectUrl = `${window.location.origin}/auth`;
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(resetEmail.trim());
 
-    const { error } = await supabase.auth.resetPasswordForEmail(resetEmail.trim(), {
-      redirectTo: redirectUrl,
-    });
-
-    if (error) {
+      if (error) {
+        toast({
+          title: "Error",
+          description: error.message,
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "Success",
+          description: "Password reset email sent! Please check your email for instructions.",
+        });
+        setResetEmail('');
+      }
+    } catch (error) {
+      console.error('Password reset error:', error);
       toast({
         title: "Error",
-        description: error.message,
+        description: "An unexpected error occurred. Please try again.",
         variant: "destructive",
       });
-    } else {
-      toast({
-        title: "Success",
-        description: "Password reset email sent! Please check your email for instructions.",
-      });
-      setResetEmail('');
+    } finally {
+      setLoading(false);
     }
-
-    setLoading(false);
   };
+
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin" />
+      </div>
+    );
+  }
 
   if (user) {
     return null; // Will redirect in useEffect
@@ -252,30 +287,65 @@ const Auth = () => {
                       id="signin-email"
                       type="email"
                       value={signinForm.email}
-                      onChange={(e) => setSigninForm(prev => ({ ...prev, email: e.target.value }))}
-                      required
+                      onChange={(e) => {
+                        setSigninForm(prev => ({ ...prev, email: e.target.value }));
+                        if (errors.signinEmail) {
+                          setErrors(prev => ({ ...prev, signinEmail: '' }));
+                        }
+                      }}
                       placeholder="Enter your email"
                       disabled={loading}
+                      className={errors.signinEmail ? 'border-red-500' : ''}
                     />
+                    {errors.signinEmail && (
+                      <p className="text-sm text-red-500 mt-1">{errors.signinEmail}</p>
+                    )}
                   </div>
                   <div>
                     <Label htmlFor="signin-password">Password</Label>
-                    <Input
-                      id="signin-password"
-                      type="password"
-                      value={signinForm.password}
-                      onChange={(e) => setSigninForm(prev => ({ ...prev, password: e.target.value }))}
-                      required
-                      placeholder="Enter your password"
-                      disabled={loading}
-                    />
+                    <div className="relative">
+                      <Input
+                        id="signin-password"
+                        type={showPassword ? "text" : "password"}
+                        value={signinForm.password}
+                        onChange={(e) => {
+                          setSigninForm(prev => ({ ...prev, password: e.target.value }));
+                          if (errors.signinPassword) {
+                            setErrors(prev => ({ ...prev, signinPassword: '' }));
+                          }
+                        }}
+                        placeholder="Enter your password"
+                        disabled={loading}
+                        className={errors.signinPassword ? 'border-red-500 pr-10' : 'pr-10'}
+                      />
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                        onClick={() => setShowPassword(!showPassword)}
+                        disabled={loading}
+                      >
+                        {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </Button>
+                    </div>
+                    {errors.signinPassword && (
+                      <p className="text-sm text-red-500 mt-1">{errors.signinPassword}</p>
+                    )}
                   </div>
                   <Button
                     type="submit"
                     className="w-full bg-blue-600 hover:bg-blue-700"
                     disabled={loading}
                   >
-                    {loading ? 'Signing In...' : 'Sign In'}
+                    {loading ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Signing In...
+                      </>
+                    ) : (
+                      'Sign In'
+                    )}
                   </Button>
                 </form>
               </TabsContent>
@@ -289,11 +359,19 @@ const Auth = () => {
                         id="first-name"
                         type="text"
                         value={signupForm.firstName}
-                        onChange={(e) => setSignupForm(prev => ({ ...prev, firstName: e.target.value }))}
-                        required
+                        onChange={(e) => {
+                          setSignupForm(prev => ({ ...prev, firstName: e.target.value }));
+                          if (errors.firstName) {
+                            setErrors(prev => ({ ...prev, firstName: '' }));
+                          }
+                        }}
                         placeholder="First name"
                         disabled={loading}
+                        className={errors.firstName ? 'border-red-500' : ''}
                       />
+                      {errors.firstName && (
+                        <p className="text-sm text-red-500 mt-1">{errors.firstName}</p>
+                      )}
                     </div>
                     <div>
                       <Label htmlFor="last-name">Last Name</Label>
@@ -301,11 +379,19 @@ const Auth = () => {
                         id="last-name"
                         type="text"
                         value={signupForm.lastName}
-                        onChange={(e) => setSignupForm(prev => ({ ...prev, lastName: e.target.value }))}
-                        required
+                        onChange={(e) => {
+                          setSignupForm(prev => ({ ...prev, lastName: e.target.value }));
+                          if (errors.lastName) {
+                            setErrors(prev => ({ ...prev, lastName: '' }));
+                          }
+                        }}
                         placeholder="Last name"
                         disabled={loading}
+                        className={errors.lastName ? 'border-red-500' : ''}
                       />
+                      {errors.lastName && (
+                        <p className="text-sm text-red-500 mt-1">{errors.lastName}</p>
+                      )}
                     </div>
                   </div>
                   <div>
@@ -314,31 +400,65 @@ const Auth = () => {
                       id="signup-email"
                       type="email"
                       value={signupForm.email}
-                      onChange={(e) => setSignupForm(prev => ({ ...prev, email: e.target.value }))}
-                      required
+                      onChange={(e) => {
+                        setSignupForm(prev => ({ ...prev, email: e.target.value }));
+                        if (errors.signupEmail) {
+                          setErrors(prev => ({ ...prev, signupEmail: '' }));
+                        }
+                      }}
                       placeholder="Enter your email"
                       disabled={loading}
+                      className={errors.signupEmail ? 'border-red-500' : ''}
                     />
+                    {errors.signupEmail && (
+                      <p className="text-sm text-red-500 mt-1">{errors.signupEmail}</p>
+                    )}
                   </div>
                   <div>
                     <Label htmlFor="signup-password">Password</Label>
-                    <Input
-                      id="signup-password"
-                      type="password"
-                      value={signupForm.password}
-                      onChange={(e) => setSignupForm(prev => ({ ...prev, password: e.target.value }))}
-                      required
-                      placeholder="Create a password"
-                      minLength={6}
-                      disabled={loading}
-                    />
+                    <div className="relative">
+                      <Input
+                        id="signup-password"
+                        type={showSignupPassword ? "text" : "password"}
+                        value={signupForm.password}
+                        onChange={(e) => {
+                          setSignupForm(prev => ({ ...prev, password: e.target.value }));
+                          if (errors.signupPassword) {
+                            setErrors(prev => ({ ...prev, signupPassword: '' }));
+                          }
+                        }}
+                        placeholder="Create a password"
+                        disabled={loading}
+                        className={errors.signupPassword ? 'border-red-500 pr-10' : 'pr-10'}
+                      />
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                        onClick={() => setShowSignupPassword(!showSignupPassword)}
+                        disabled={loading}
+                      >
+                        {showSignupPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </Button>
+                    </div>
+                    {errors.signupPassword && (
+                      <p className="text-sm text-red-500 mt-1">{errors.signupPassword}</p>
+                    )}
                   </div>
                   <Button
                     type="submit"
                     className="w-full bg-orange-500 hover:bg-orange-600"
                     disabled={loading}
                   >
-                    {loading ? 'Creating Account...' : 'Create Account'}
+                    {loading ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Creating Account...
+                      </>
+                    ) : (
+                      'Create Account'
+                    )}
                   </Button>
                 </form>
               </TabsContent>
@@ -351,11 +471,19 @@ const Auth = () => {
                       id="reset-email"
                       type="email"
                       value={resetEmail}
-                      onChange={(e) => setResetEmail(e.target.value)}
-                      required
+                      onChange={(e) => {
+                        setResetEmail(e.target.value);
+                        if (errors.resetEmail) {
+                          setErrors(prev => ({ ...prev, resetEmail: '' }));
+                        }
+                      }}
                       placeholder="Enter your email address"
                       disabled={loading}
+                      className={errors.resetEmail ? 'border-red-500' : ''}
                     />
+                    {errors.resetEmail && (
+                      <p className="text-sm text-red-500 mt-1">{errors.resetEmail}</p>
+                    )}
                   </div>
                   <div className="text-sm text-gray-600">
                     Enter your email address and we'll send you a link to reset your password.
@@ -365,7 +493,14 @@ const Auth = () => {
                     className="w-full bg-green-600 hover:bg-green-700"
                     disabled={loading}
                   >
-                    {loading ? 'Sending Reset Email...' : 'Send Reset Email'}
+                    {loading ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Sending Reset Email...
+                      </>
+                    ) : (
+                      'Send Reset Email'
+                    )}
                   </Button>
                 </form>
               </TabsContent>

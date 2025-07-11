@@ -1,49 +1,38 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Search, ShoppingCart, User, Menu, X, Package, UserCircle, Heart } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { supabase } from '@/integrations/supabase/client';
-import { User as SupabaseUser, Session } from '@supabase/supabase-js';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '@/hooks/useAuth';
+import { useToast } from '@/hooks/use-toast';
 import CartSidebar from './CartSidebar';
 
 const Header = () => {
-  const [user, setUser] = useState<SupabaseUser | null>(null);
-  const [session, setSession] = useState<Session | null>(null);
+  const { user, signOut, loading } = useAuth();
   const [searchQuery, setSearchQuery] = useState('');
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const navigate = useNavigate();
-
-  useEffect(() => {
-    // Set up auth state listener first
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (event, session) => {
-        console.log('Header auth state changed:', event, session?.user?.email);
-        setSession(session);
-        setUser(session?.user ?? null);
-      }
-    );
-
-    // Then check for existing session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      console.log('Header current session:', session?.user?.email);
-      setSession(session);
-      setUser(session?.user ?? null);
-    });
-
-    return () => subscription.unsubscribe();
-  }, []);
+  const { toast } = useToast();
 
   const handleSignOut = async () => {
     console.log('Signing out user');
-    const { error } = await supabase.auth.signOut();
+    const { error } = await signOut();
     if (error) {
       console.error('Error signing out:', error);
+      toast({
+        title: "Error",
+        description: "Failed to sign out. Please try again.",
+        variant: "destructive",
+      });
     } else {
       setIsUserMenuOpen(false);
+      toast({
+        title: "Signed Out",
+        description: "You have been signed out successfully.",
+      });
       navigate('/');
     }
   };
@@ -111,7 +100,7 @@ const Header = () => {
 
             {/* User Actions */}
             <div className="flex items-center space-x-4">
-              {user ? (
+              {!loading && user ? (
                 <div className="relative">
                   <Button
                     variant="ghost"
@@ -158,6 +147,7 @@ const Header = () => {
                   variant="ghost"
                   className="text-white hover:bg-blue-700 hidden md:flex"
                   onClick={() => navigate('/auth')}
+                  disabled={loading}
                 >
                   <User size={20} className="mr-2" />
                   Login
@@ -211,7 +201,7 @@ const Header = () => {
         {isMenuOpen && (
           <div className="md:hidden border-t border-blue-500 bg-blue-700">
             <div className="container mx-auto px-4 py-4 space-y-2">
-              {user ? (
+              {!loading && user ? (
                 <>
                   <Button
                     variant="ghost"
@@ -263,6 +253,7 @@ const Header = () => {
                     navigate('/auth');
                     setIsMenuOpen(false);
                   }}
+                  disabled={loading}
                 >
                   <User size={20} className="mr-2" />
                   Login
